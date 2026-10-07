@@ -1,0 +1,22 @@
+The first test in my journey of x86 assembly is basic addition, this will be done through the addition.asm file, its a simple program that uses ax and bx, the program stores the immediate value of 5 in ax, 8 in bx, then adds ax and bx. the expeceted result is 000Dh.
+
+Using the N, or single step command on the monitor, execute it at 100, assuming CS is set to 0000 and that you already loaded the program at 0000:0100 using the laoder, you get this output:
+
+SW0000:0100, 05B8- 05B8,
+0102 BB00- BB00,                                                                                             
+0104 0008- 0008,                                                                                             
+0106 D801- D801,                                                                                             
+0108 FEEB- FEEB,                                                                                             
+010A FFFF-                                                                                                   
+.N 0000- 0D 100,                                                                                             
+ 0103- BB .#                                                                                                 
+.XAX=0005-                                                                                                   
+.N 0103- BB ,                                                                                                
+ 0106- 01                                                                                                    
+.XBX=0008-                                                                                                   
+.N 0106- 01 ,                                                                                                
+ 0108- EB                                                                                                    
+.XAX=000D-
+
+Notice the single step into 100, then it outputs the byte BB, we use <CR> to exit the single step and inspect the AX reg with the X command on the monitor. It is now populated with 0005h, we step again and inspect the BX monitor, it's populated with 0008h. Finally, we step again to add, this produces a result in AX of 000Dh, which is exactly what we wanted! So first trial of 8086 math is a success!
+

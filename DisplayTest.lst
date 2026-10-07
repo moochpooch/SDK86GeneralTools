@@ -1,0 +1,17 @@
+     1                                  org 0100h
+     2                                  bits 16
+     3                                  
+     4                                  start:
+     5                                  	; Select Display RAM address 0 and enable auto-increment.
+     6 00000000 BAEAFF                  	mov dx, 0FFEAH
+     7 00000003 B090                    	mov al, 90H
+     8 00000005 EE                      	out dx, al
+     9                                  	
+    10                                  	; Store the segment pattern for “1” at RAM address 0.
+    11 00000006 BAE8FF                  	mov dx, 0FFE8H
+    12 00000009 B8FFFF                  	mov ax, 0FFFFH
+    13 0000000C EF                      	out dx, ax
+    14 0000000D EF                      	out dx, ax
+    15 0000000E EF                      	out dx, ax
+    16                                  stop:
+    17 0000000F CD02                    	int 2

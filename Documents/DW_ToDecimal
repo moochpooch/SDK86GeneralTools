@@ -1,0 +1,3 @@
+This tool is supposed to convert long hex strings into decimal ones. It's specifically meant to be use with the DW command. Currently it just takes hex numbers and outputs them as decimal. If it encounters something that is not in the range of a hex digit, output will show an error.
+
+At first I though of requiring the input of DW0000:offset so that line numbers could be removed, but I feel like that can be done by some bash script instead.

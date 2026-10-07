@@ -1,0 +1,22 @@
+# IDEA
+The aim of this experiment is to understand what happens when you have 0xFF as the low byte of AX, and then add one to it. Will it safely overflow into the high byte at AH? or will it just circle back to 0?
+
+To test this, AX will be populated with 00FFh, then independently, AL will have 1 added to it.
+
+# Hypothesis
+I believe that adding 1 to an AL with 0xFF will just overflow to AH and produce 0100h for the AX reg.
+
+# RESULTS
+.SW0000:0100, 34B8- FFB8,                                                                                    
+0102 B412- 0400,
+0104 B0FF- EB01,                                                                                             
+0106 EBAB- 
+.N 00F4- AB 100,
+ 0103- 04 
+.XAX=00FF- 
+.N 0103- 04 ,
+ 0105- EB ,
+ 00B2- 36 
+.XAX=0000-
+
+Very unexpected; it appears like overflowing a low byte will not automatically overflow the high byte. It will just set the low_byte to the next possible value, i.e. 100h, but only the 00h can actually fit in the single byte reg.

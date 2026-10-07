@@ -1,0 +1,22 @@
+# IDEA
+This experiment is meant to figure out what the adc command does, without ever looking it up. The program loads 00ffh into AX, adds 1 to the low byte, then adc ah, 0, which does something to the high byte.
+
+# Hypothesis
+By the name alone, I believe that it will add carry. Perhaps that leftover 1 is then added to the high byte. But then where is that carry stored?
+
+# Result
+.N 0105- 80 100,
+ 0103- 04 ,
+ 0105- 80 
+.XAX=0000- 
+.N 0105- 80 ,
+ 0108- EB ,
+ 0108- EB 
+.XAX=0100-
+
+I believe my theory was correct! adc does in fact add the carry over! But it doesn't answer the question of where this carry over is stored. It very well may be that this unkown storage location is moved into the reg, that's why overflow in al just stored the low 00.
+
+APPENDIX:
+So the value isn't some unknown location, it's the carry flag, which is a register that just stores one if the previous operation had a carry over. The adc ah, 0 basically just expands to
+
+AH = AH + 0 + CF

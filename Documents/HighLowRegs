@@ -1,0 +1,29 @@
+# IDEA
+This experiment is meant to prove that the registers on the 8086 are indeed accessible via high and low regs, each being 8-bit. This is done by using AH and AL to use high and low byte respectively. 
+
+The experiemnt will load 1234h into AX to occupy the entire 16-bit reg. Then AH will be populated with FFh and AL AB, finally the AX reg will be inspected to prove that those high and low regs are apart of AX.
+
+NOTE: One thing about asm is that you can write hex directly, but your hex value must be wrapped with an 0 on the left of the hex number and a h on the right. Though I'm not certain as to why AX doesn't need it but the single byte regs do.
+
+Another cool thing about the 8086 is that the step instruction does indeed step, so every press of the comma key is basically a line. Though I'm sure that this idea fails once you start getting into larger macros that substitutions that nasm may produce with things like arrays.
+
+APPENDIX: So about the 0 ... h sytax. You only need to add the 0 on the left if you start the hex number with a letter. If you start with a number, like we did on the AX reg, the 0 is not needed. It's not about byte or word regs.
+
+# RESULTS
+.SW0000:0100, 05B8- 34B8,                                                                                    
+0102 BB00- B412,                                                                                             
+0104 0008- B0FF,                                                                                             
+0106 D801- EBAB,                                                                                             
+0108 FEEB-                                                                                                   
+.N 0108- EB 100,                                                                                             
+ 0103- B4                                                                                                    
+.XAX=1234-                                                                                                   
+.N 0103- B4 ,                                                                                                
+ 0105- B0 ,                                                                                                  
+ 0107- EB ,                                                                                                  
+ 00F4- AB                                                                                                    
+.XAX=FFAB-     
+
+Amazing! We see again use the single step instruction to step through the program, first we step the the mov ax, 1234h instruction and display it's memory, .XAX=1234- shows that AX does have 1234h stored in it. Then we skip to the last instruction before jmp stop and display the AX reg again. At this point if our program was correct, it should display the independently populated AH and AL as FFABh, and we see that is indeed does!
+
+This shows that regs can be accessed and manipulated with the high byte and low byte independently.

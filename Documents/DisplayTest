@@ -1,0 +1,11 @@
+The DisplayTest.asm program is meant to showcase the operation of the display located on the SDK-86.
+
+The display is driven by an intel 8279, which contains various components needed to drive the 8-segment displays. The chip can write and read from the display and keyboard, though this experiment only focuses on the usage to operater the display. The important characteristics of the display focus on the use of a command output port, and a data output port. 
+
+The "Write Command" port is located at FFEA, this port must contain a specific byte that will tell the IC how to interpret data from the write display ram, and how to react to the information.
+
+For this experiment, the command '10010000' or '90h' is written; the datasheet for the chip calls this command "Write Display RAM", which means that whatever we write into the Write Ram port will be interpreted as a change to the display's configuration. Note that the second 1 enables autoincrement. The LSB bits are the strating address for when writing begins. In this case, it will be the right most 8-segment.
+
+Next, we write to the Display Ram, this is done by writing  to FFE8h. On 2-8 of the SDK manual, there is a better description of the possible ways to write. Remember, you can techincally write a word into the port, but the segment is driven by 8 bits, meaning that you can do 0xxBAh, where xx represents the don't cares, and BA is where to write you segment.
+
+As the previous paragraph implies, the LSB are A, and the second MSN (most significant nibble) is the B.

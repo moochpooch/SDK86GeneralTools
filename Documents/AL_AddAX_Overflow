@@ -1,0 +1,25 @@
+# IDEA
+This experiment is a continuation to the one documented in ./AL_Overflow, except that now the addition is done to the AX reg, not to the AL reg.
+
+Similar to the first experiment, AX will be loaded with 00FFh; what differs is what register the addition is operated on. This time, AX will be incremented by 1, not AL.
+
+# Hypothesis
+I believe that the 8086 treats the low byte reg exactly how it is, just a byte. It will not overflow to another address, perhaps it stores the result in some temporary place, then loads it into just the operand register, hence why AL could only load the 00h from the previous experiment.
+
+Since the AX can hold 16 bits, I believe that this addition will overflow to AH and produce 0100h. Off topic, but the next question becomes: Where are results held before they are loaded into registers? Are they even held elsewhere?
+
+# RESULT
+.SW0000:0100, FFB8- FFB8,
+0102 0400- 8300,
+0104 EB01- 01C0,
+0106 EBAB- FEEB,
+0108 FEEB- 
+.N 00B2- 36 100,
+ 0103- 83 
+.XAX=00FF- 
+.N 0103- 83 ,
+ 0106- EB ,
+ 0106- EB 
+.XAX=0100-
+
+And what a shock (kinda, not really), it did overflow inot the high byte of AX! It appears that results are only stored up to the size of it's limit. I.e. your single byte operation will only write to that single byte reg!

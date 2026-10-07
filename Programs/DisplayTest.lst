@@ -1,0 +1,42 @@
+     1                                  org 0100h
+     2                                  bits 16
+     3                                  
+     4                                  start:
+     5                                  	; Clear display.
+     6 00000000 BAEAFF                  	mov dx, 0FFEAH
+     7 00000003 B0D1                    	mov al, 11010001b
+     8 00000005 EE                      	out dx, al
+     9                                  
+    10                                  	; Wait for mandatory clear before writing into ram.
+    11 00000006 E81800                  	call delay
+    12                                  
+    13                                  	; Write display, auto increment enabled.
+    14 00000009 B090                    	mov al, 10010000b
+    15 0000000B EE                      	out dx, al
+    16                                  
+    17                                  	; Store the segment pattern for “E” at RAM address 0.
+    18 0000000C BAE8FF                  	mov dx, 0FFE8H
+    19 0000000F B87900                  	mov ax, 00079H
+    20 00000012 EF                      	out dx, ax
+    21                                  
+    22                                  	; Store the segment pattern for "n",.
+    23 00000013 B85400                  	mov ax, 00054h
+    24 00000016 EF                      	out dx, ax
+    25                                  
+    26                                  	; Store the segment pattern for "O".
+    27 00000017 B83F00                  	mov ax, 0003Fh
+    28 0000001A EF                      	out dx, ax
+    29                                  
+    30                                  	; Store the segment pattern for "D".
+    31 0000001B B85E00                  	mov ax, 0005Eh
+    32 0000001E EF                      	out dx, ax
+    33                                  stop:
+    34 0000001F CD02                    	int 2
+    35                                  
+    36                                  delay:
+    37 00000021 B93000                  	mov cx, 48
+    38                                  .wait:
+    39 00000024 E2FE                    	loop .wait
+    40 00000026 C3                      	ret
+    41                                  
+    42                                  
