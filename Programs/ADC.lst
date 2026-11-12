@@ -1,0 +1,8 @@
+     1                                  ORG 0100
+     2                                  bits 16
+     3                                  start:
+     4 00000000 B8FF00                  	mov ax, 00FFh
+     5 00000003 0401                    	add al, 1
+     6 00000005 80D400                  	adc ah, 0
+     7                                  stop:
+     8 00000008 EBFE                    	jmp stop

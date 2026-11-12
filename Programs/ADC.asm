@@ -1,3 +1,4 @@
+ORG 0100
 bits 16
 start:
 	mov ax, 00FFh
