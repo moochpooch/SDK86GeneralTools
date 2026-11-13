@@ -1,0 +1,617 @@
+     1                                  ORG 100h
+     2                                  BITS 16
+     3                                  
+     4                                  ; Intel SDK-86 FAC arithmetic MVP test harness (8086 / NASM)
+     5                                  ; Assemble: nasm -f bin fac_mvp_sdk86.asm -o fac_mvp_sdk86.bin
+     6                                  ; Transfer binary to 0000:0100 (ORG 100h), then GO 0000:0100.
+     7                                  ; On completion calls INT 2 to return to the SDK-86 monitor.
+     8                                  ; The test results are stored at fixed offsets for easy monitor inspection:
+     9                                  ;   0000:0102 - 0000:010A TEST_RESULTS[0..8] (01=pass, FF=fail, 00=not run)
+    10                                  ;   0000:010B FAILURES (number of failed tests)
+    11                                  ;   0000:010C - 0000:010D TEST_OUT (last packed test result, little endian)
+    12                                  ;   0000:010E TEST_DONE (01=finished, 00=not finished)
+    13                                  ;
+    14                                  ; Uses current monitor-provided SS:SP; do not run if stack is not valid.
+    15                                  ; INT 2 behavior is user-confirmed SDK-86 monitor behavior.
+    16                                  ;
+    17                                  start:
+    18 00000000 EB0D                        jmp short main
+    19                                  
+    20 00000002 00<rep 9h>              TEST_RESULTS: times 9 db 0
+    21 0000000B 00                      FAILURES: db 0
+    22 0000000C 0000                    TEST_OUT: dw 0
+    23 0000000E 00                      TEST_DONE: db 0
+    24                                  
+    25                                  main:
+    26 0000000F 0E                          push cs
+    27 00000010 1F                          pop ds
+    28                                      ; Clear prior results so rerunning doesn't leave stale test marks.
+    29 00000011 C606[0E00]00                mov byte [TEST_DONE], 0
+    30 00000016 C606[0B00]00                mov byte [FAILURES], 0
+    31 0000001B BF[0200]                    mov di, TEST_RESULTS
+    32 0000001E B90900                      mov cx, 9
+    33                                  .clear:
+    34 00000021 C60500                      mov byte [di], 0
+    35 00000024 47                          inc di
+    36 00000025 E2FA                        loop .clear
+    37                                  
+    38                                      ; TEST 0: load 2, add 3 => packed 5
+    39 00000027 BE[7201]                    mov si, MATRIX+0
+    40 0000002A E88B01                      call FAC_LOAD
+    41 0000002D BE[7401]                    mov si, MATRIX+2
+    42 00000030 E8F602                      call FP_ADD
+    43 00000033 BE[0C00]                    mov si, TEST_OUT
+    44 00000036 E80F02                      call FAC_STORE
+    45 00000039 B85000                      mov ax, 0050h
+    46 0000003C BB0000                      mov bx, 0
+    47 0000003F E81701                      call CHECK_PACKED
+    48                                  
+    49                                      ; TEST 1: load 7, subtract 3 => packed 4
+    50 00000042 BE[7801]                    mov si, MATRIX+6
+    51 00000045 E87001                      call FAC_LOAD
+    52 00000048 BE[7401]                    mov si, MATRIX+2
+    53 0000004B E8F802                      call FAC_SUB
+    54 0000004E BE[0C00]                    mov si, TEST_OUT
+    55 00000051 E8F401                      call FAC_STORE
+    56 00000054 B84000                      mov ax, 0040h
+    57 00000057 BB0100                      mov bx, 1
+    58 0000005A E8FC00                      call CHECK_PACKED
+    59                                  
+    60                                      ; TEST 2: load 7, multiply 11 => packed 77
+    61 0000005D BE[7801]                    mov si, MATRIX+6
+    62 00000060 E85501                      call FAC_LOAD
+    63 00000063 BE[7A01]                    mov si, MATRIX+8
+    64 00000066 E8FA02                      call FAC_MUL
+    65 00000069 BE[0C00]                    mov si, TEST_OUT
+    66 0000006C E8D901                      call FAC_STORE
+    67 0000006F B8D004                      mov ax, 04D0h
+    68 00000072 BB0200                      mov bx, 2
+    69 00000075 E8E100                      call CHECK_PACKED
+    70                                  
+    71                                      ; TEST 3: -3 * 2 => -6
+    72 00000078 BE[7E01]                    mov si, NEG_THREE
+    73 0000007B E83A01                      call FAC_LOAD
+    74 0000007E BE[7201]                    mov si, MATRIX+0
+    75 00000081 E8DF02                      call FAC_MUL
+    76 00000084 BE[0C00]                    mov si, TEST_OUT
+    77 00000087 E8BE01                      call FAC_STORE
+    78 0000008A B86080                      mov ax, 8060h
+    79 0000008D BB0300                      mov bx, 3
+    80 00000090 E8C600                      call CHECK_PACKED
+    81                                  
+    82                                      ; TEST 4: exponent alignment: 2 + (3*2^1) = 8
+    83 00000093 BE[7201]                    mov si, MATRIX+0
+    84 00000096 E81F01                      call FAC_LOAD
+    85 00000099 BE[8001]                    mov si, THREE_EXP_ONE
+    86 0000009C E88A02                      call FP_ADD
+    87 0000009F BE[0C00]                    mov si, TEST_OUT
+    88 000000A2 E8A301                      call FAC_STORE
+    89 000000A5 B84100                      mov ax, 0041h     ; 4*2^1 = 8, after alignment/truncation
+    90 000000A8 BB0400                      mov bx, 4
+    91 000000AB E8AB00                      call CHECK_PACKED
+    92                                  
+    93                                      ; TEST 5: zero * negative => canonical zero
+    94 000000AE BE[8201]                    mov si, ZERO_VALUE
+    95 000000B1 E80401                      call FAC_LOAD
+    96 000000B4 BE[7E01]                    mov si, NEG_THREE
+    97 000000B7 E8A902                      call FAC_MUL
+    98 000000BA BE[0C00]                    mov si, TEST_OUT
+    99 000000BD E88801                      call FAC_STORE
+   100 000000C0 B80000                      mov ax, 0000h
+   101 000000C3 BB0500                      mov bx, 5
+   102 000000C6 E89000                      call CHECK_PACKED
+   103                                  
+   104                                      ; TEST 6: 2047^3 needs 64 -> 32-bit normalization
+   105                                      ; 2047^3 = 0x1FF4017FF, so FAC magnitude = 0xFFA00BFF, E=1
+   106 000000C9 BE[8401]                    mov si, MAX_MANTISSA
+   107 000000CC E8E900                      call FAC_LOAD
+   108 000000CF BE[8401]                    mov si, MAX_MANTISSA
+   109 000000D2 E88E02                      call FAC_MUL
+   110 000000D5 BE[8401]                    mov si, MAX_MANTISSA
+   111 000000D8 E88802                      call FAC_MUL
+   112 000000DB BB0600                      mov bx, 6
+   113 000000DE 813E[8801]FF0B              cmp word [FAC_MAG_LO], 0BFFh
+   114 000000E4 7513                        jne .chain_failed
+   115 000000E6 833E[8A01]A0                cmp word [FAC_MAG_HI], 0FFA0h
+   116 000000EB 750C                        jne .chain_failed
+   117 000000ED 803E[8701]01                cmp byte [FAC_EXP], 1
+   118 000000F2 7505                        jne .chain_failed
+   119 000000F4 E86A00                      call MARK_PASS
+   120 000000F7 EB03                        jmp .chain_done
+   121                                  .chain_failed:
+   122 000000F9 E86B00                      call MARK_FAIL
+   123                                  .chain_done:
+   124                                  
+   125                                      ; TEST 7: FAC_STORE does not mutate the FAC source
+   126                                      ; 2047^2 = 0x003FF001, exponent=0
+   127 000000FC BE[8401]                    mov si, MAX_MANTISSA
+   128 000000FF E8B600                      call FAC_LOAD
+   129 00000102 BE[8401]                    mov si, MAX_MANTISSA
+   130 00000105 E85B02                      call FAC_MUL
+   131 00000108 BE[0C00]                    mov si, TEST_OUT
+   132 0000010B E83A01                      call FAC_STORE
+   133 0000010E BB0700                      mov bx, 7
+   134 00000111 813E[8801]01F0              cmp word [FAC_MAG_LO], 0F001h
+   135 00000117 7513                        jne .preserve_failed
+   136 00000119 833E[8A01]3F                cmp word [FAC_MAG_HI], 003Fh
+   137 0000011E 750C                        jne .preserve_failed
+   138 00000120 803E[8701]00                cmp byte [FAC_EXP], 0
+   139 00000125 7505                        jne .preserve_failed
+   140 00000127 E83700                      call MARK_PASS
+   141 0000012A EB03                        jmp .preserve_done
+   142                                  .preserve_failed:
+   143 0000012C E83800                      call MARK_FAIL
+   144                                  .preserve_done:
+   145                                  
+   146                                      ; TEST 8: FAC_SAVE / FAC_RES restore loaded 7
+   147 0000012F BE[7801]                    mov si, MATRIX+6
+   148 00000132 E88300                      call FAC_LOAD
+   149 00000135 E8DE02                      call FAC_SAVE
+   150 00000138 BE[7201]                    mov si, MATRIX+0
+   151 0000013B E87A00                      call FAC_LOAD
+   152 0000013E E8F202                      call FAC_RES
+   153 00000141 BE[0C00]                    mov si, TEST_OUT
+   154 00000144 E80101                      call FAC_STORE
+   155 00000147 B87000                      mov ax, 0070h
+   156 0000014A BB0800                      mov bx, 8
+   157 0000014D E80900                      call CHECK_PACKED
+   158                                  
+   159 00000150 C606[0E00]01                mov byte [TEST_DONE], 1
+   160 00000155 CD02                        int 2                ; SDK-86 monitor return (not DOS)
+   161                                  .after_return:
+   162 00000157 EBFE                        jmp .after_return    ; Defensive: if monitor unexpectedly returns
+   163                                  
+   164                                  ; AX expected packed value; BX = 0-based test index
+   165                                  CHECK_PACKED:
+   166 00000159 3B06[0C00]                  cmp ax, [TEST_OUT]
+   167 0000015D 7508                        jne MARK_FAIL
+   168 0000015F EB00                        jmp MARK_PASS
+   169                                  
+   170                                  MARK_PASS:
+   171 00000161 C687[0200]01                mov byte [TEST_RESULTS+bx], 1
+   172 00000166 C3                          ret
+   173                                  
+   174                                  MARK_FAIL:
+   175 00000167 C687[0200]FF                mov byte [TEST_RESULTS+bx], 0FFh
+   176 0000016C FE06[0B00]                  inc byte [FAILURES]
+   177 00000170 C3                          ret
+   178                                  
+   179                                  ; 2x3 augmented matrix, row-major; S11E4 packed M*2^E
+   180                                  ; row0: [2, 3 | 5]; row1: [7, 11 | 13]
+   181 00000171 02                      N: db 2
+   182 00000172 2000300050007000B0-     MATRIX: dw 0020h,0030h,0050h,0070h,00B0h,00D0h
+   182 0000017B 00D000             
+   183 0000017E 3080                    NEG_THREE: dw 8030h
+   184 00000180 3100                    THREE_EXP_ONE: dw 0031h
+   185 00000182 0000                    ZERO_VALUE: dw 0000h
+   186 00000184 F07F                    MAX_MANTISSA: dw 7FF0h
+   187                                  
+   188                                  ; Floating-point registers and multiplication scratch
+   189 00000186 00                      FAC_SIGN: db 0
+   190 00000187 00                      FAC_EXP: db 0
+   191 00000188 0000                    FAC_MAG_LO: dw 0
+   192 0000018A 0000                    FAC_MAG_HI: dw 0
+   193 0000018C 00                      FTMP_SIGN: db 0
+   194 0000018D 00                      FTMP_EXP: db 0
+   195 0000018E 0000                    FTMP_MAG_LO: dw 0
+   196 00000190 0000                    FTMP_MAG_HI: dw 0
+   197 00000192 00                      FSRC_SIGN: db 0
+   198 00000193 00                      FSRC_EXP: db 0
+   199 00000194 0000                    FSRC_MAG_LO: dw 0
+   200 00000196 0000                    FSRC_MAG_HI: dw 0
+   201 00000198 0000                    FMULTI: dw 0
+   202 0000019A 0000                    FMUL_0: dw 0
+   203 0000019C 0000                    FMUL_1: dw 0
+   204 0000019E 0000                    FMUL_2: dw 0
+   205 000001A0 0000                    FMUL_3: dw 0
+   206                                  
+   207                                  ; === Original routines, with minimal assembly/test fixes ===
+   208                                  ; ----- MATRIX_ADDR -----
+   209                                  MATRIX_ADDR:
+   210 000001A2 30E4                        xor ah, ah      ; Clear ah, now AX = row
+   211 000001A4 30FF                        xor bh, bh      ; clear bh, now BX = col
+   212                                      
+   213 000001A6 89C2                        mov dx, ax      ; set dx 
+   214 000001A8 D1E0                        shl ax, 1       ; 2*r
+   215 000001AA 01D0                        add ax, dx      ; 3*r
+   216 000001AC D1E0                        shl ax, 1        ; 6*r
+   217                                  
+   218 000001AE D1E3                        shl bx, 1       ; 2*c
+   219 000001B0 01D8                        add ax, bx      ; final address for given element
+   220                                  
+   221 000001B2 BE[7201]                    mov si, MATRIX  ; move pointer to start of matrix
+   222 000001B5 01C6                        add si, ax      ; add offset to that pointer to get element address.
+   223                                      
+   224 000001B7 C3                          ret             ; Job is done after this
+   225                                  
+   226                                  ; ----- FAC_LOAD -----
+   227                                  FAC_LOAD:
+   228 000001B8 8B04                        mov ax, [si]        ; Use AX as the point to extract from using bx
+   229                                  
+   230                                  .extract_sign:
+   231 000001BA 88E3                        mov bl, ah
+   232 000001BC D0EB                        shr bl, 1           ; extract the high byte of ah, then shift 7 to isolate sign bit
+   233 000001BE D0EB                        shr bl, 1 
+   234 000001C0 D0EB                        shr bl, 1 
+   235 000001C2 D0EB                        shr bl, 1 
+   236 000001C4 D0EB                        shr bl, 1 
+   237 000001C6 D0EB                        shr bl, 1 
+   238 000001C8 D0EB                        shr bl, 1           ; 8086 doesn't support shifts beyond just one at a time
+   239                                  
+   240 000001CA 881E[8601]                  mov [FAC_SIGN], bl  ; Store the sign bit into FAC_SIGN
+   241                                  
+   242                                  .extract_magnitude:
+   243 000001CE 89C3                        mov bx, ax
+   244 000001D0 81E3F07F                    and bx, 7FF0h               ; Clear low 4 bits and high 1 bit
+   245 000001D4 D1EB                        shr bx, 1                   ; Shift by 4 to allign mag to lower bits
+   246 000001D6 D1EB                        shr bx, 1 
+   247 000001D8 D1EB                        shr bx, 1 
+   248 000001DA D1EB                        shr bx, 1
+   249                                  
+   250 000001DC 891E[8801]                  mov [FAC_MAG_LO], bx        ; Store the unpacked mag into the FAC low memory
+   251 000001E0 C706[8A01]0000              mov word [FAC_MAG_HI], 0    ; Clear the high memory space
+   252                                  
+   253                                  .extract_exponent:
+   254 000001E6 88C3                        mov bl, al                  ; Move the exponent into b low
+   255 000001E8 80E30F                      and bl, 0Fh                 ; Clear high nibble, keep low since we only need the low 4 bits
+   256                                      
+   257 000001EB D0E3                        shl bl, 1                   ; Align the cleared 4 bit to the left of the 8 bit reg
+   258 000001ED D0E3                        shl bl, 1
+   259 000001EF D0E3                        shl bl, 1
+   260 000001F1 D0E3                        shl bl, 1
+   261                                  
+   262 000001F3 D0FB                        sar bl, 1                   ; Shift the exponent to the right but while preserving the sign
+   263 000001F5 D0FB                        sar bl, 1
+   264 000001F7 D0FB                        sar bl, 1
+   265 000001F9 D0FB                        sar bl, 1
+   266                                  
+   267 000001FB 881E[8701]                  mov [FAC_EXP], bl
+   268                                      
+   269 000001FF C3                          ret
+   270                                  
+   271                                  ; ----- FTMP_LOAD -----
+   272                                  FTMP_LOAD:
+   273 00000200 8B04                        mov ax, [si]        ; Use AX as the point to extract from using bx
+   274                                  
+   275                                  .extract_sign:
+   276 00000202 88E3                        mov bl, ah
+   277 00000204 D0EB                        shr bl, 1           ; extract the high byte of ah, then shift 7 to isolate sign bit
+   278 00000206 D0EB                        shr bl, 1 
+   279 00000208 D0EB                        shr bl, 1 
+   280 0000020A D0EB                        shr bl, 1 
+   281 0000020C D0EB                        shr bl, 1 
+   282 0000020E D0EB                        shr bl, 1 
+   283 00000210 D0EB                        shr bl, 1           ; 8086 doesn't support shifts beyond just one at a time
+   284                                  
+   285 00000212 881E[8C01]                  mov [FTMP_SIGN], bl  ; Store the sign bit into FAC_SIGN
+   286                                  
+   287                                  .extract_magnitude:
+   288 00000216 89C3                        mov bx, ax
+   289 00000218 81E3F07F                    and bx, 7FF0h               ; Clear low 4 bits and high 1 bit
+   290 0000021C D1EB                        shr bx, 1                   ; Shift by 4 to allign mag to lower bits
+   291 0000021E D1EB                        shr bx, 1 
+   292 00000220 D1EB                        shr bx, 1 
+   293 00000222 D1EB                        shr bx, 1
+   294                                  
+   295 00000224 891E[8E01]                  mov [FTMP_MAG_LO], bx        ; Store the unpacked mag into the FAC low memory
+   296 00000228 C706[9001]0000              mov word [FTMP_MAG_HI], 0    ; Clear the high memory space
+   297                                  
+   298                                  .extract_exponent:
+   299 0000022E 88C3                        mov bl, al                  ; Move the exponent into b low
+   300 00000230 80E30F                      and bl, 0Fh                 ; Clear high nibble, keep low since we only need the low 4 bits
+   301                                      
+   302 00000233 D0E3                        shl bl, 1                   ; Align the cleared 4 bit to the left of the 8 bit reg
+   303 00000235 D0E3                        shl bl, 1
+   304 00000237 D0E3                        shl bl, 1
+   305 00000239 D0E3                        shl bl, 1
+   306                                  
+   307 0000023B D0FB                        sar bl, 1                   ; Shift the exponent to the right but while preserving the sign
+   308 0000023D D0FB                        sar bl, 1
+   309 0000023F D0FB                        sar bl, 1
+   310 00000241 D0FB                        sar bl, 1
+   311                                  
+   312 00000243 881E[8D01]                  mov [FTMP_EXP], bl
+   313                                      
+   314 00000247 C3                          ret
+   315                                  
+   316                                  ; ----- FAC_STORE -----
+   317                                  FAC_STORE:
+   318 00000248 A1[8801]                    mov ax, [FAC_MAG_LO]
+   319 0000024B 8B16[8A01]                  mov dx, [FAC_MAG_HI]
+   320 0000024F 8A0E[8701]                  mov cl, [FAC_EXP]
+   321                                  
+   322                                  .normalize:
+   323 00000253 83FA00                      cmp dx, 0
+   324 00000256 7505                        jne .shift
+   325                                  
+   326 00000258 3DFF07                      cmp ax, 07FFh
+   327 0000025B 7608                        jbe .normalized
+   328                                  
+   329                                  .shift:
+   330 0000025D D1EA                        shr dx, 1
+   331 0000025F D1D8                        rcr ax, 1
+   332 00000261 FEC1                        inc cl
+   333 00000263 EBEE                        jmp .normalize
+   334                                  
+   335                                  .normalized:
+   336                                      ; Move mag into bits 4-14
+   337 00000265 D1E0                        shl ax, 1
+   338 00000267 D1E0                        shl ax, 1
+   339 00000269 D1E0                        shl ax, 1
+   340 0000026B D1E0                        shl ax, 1
+   341                                  
+   342                                      ; Exponent in bits 0-3
+   343 0000026D 88CB                        mov bl, cl              ; use normalized exponent copy, not FAC_EXP
+   344 0000026F 80E30F                      and bl, 0Fh
+   345 00000272 08D8                        or al, bl
+   346                                  
+   347                                      ; Sign bit 15
+   348 00000274 8A1E[8601]                  mov bl, [FAC_SIGN]     ; Load the sign byte into bl
+   349 00000278 D0E3                        shl bl, 1              ; Shift left by 7 to get sign bit to left side of reg
+   350 0000027A D0E3                        shl bl, 1
+   351 0000027C D0E3                        shl bl, 1
+   352 0000027E D0E3                        shl bl, 1
+   353 00000280 D0E3                        shl bl, 1
+   354 00000282 D0E3                        shl bl, 1
+   355 00000284 D0E3                        shl bl, 1
+   356 00000286 08DC                        or ah, bl             ; Join bl to ah    
+   357                                  
+   358 00000288 8904                        mov [si], ax
+   359 0000028A C3                          ret
+   360                                  
+   361                                  ; ----- FTMP_STORE -----
+   362                                  FTMP_STORE:
+   363 0000028B A1[8E01]                    mov ax, [FTMP_MAG_LO]
+   364 0000028E 8B16[9001]                  mov dx, [FTMP_MAG_HI]
+   365                                      
+   366 00000292 B91500                      mov cx, 21              ; loop 21 times to make the 32 bit memory into 11 bits
+   367                                  .normalize:
+   368 00000295 83FA00                      cmp dx, 0
+   369 00000298 7505                        jne .shift
+   370                                  
+   371 0000029A 3DFF07                      cmp ax, 07FFh
+   372 0000029D 760A                        jbe .normalized
+   373                                  
+   374                                  .shift:
+   375 0000029F D1EA                        shr dx, 1
+   376 000002A1 D1D8                        rcr ax, 1
+   377 000002A3 FE06[8D01]                  inc byte [FTMP_EXP]
+   378 000002A7 EBEC                        jmp .normalize
+   379                                  
+   380                                  .normalized:
+   381 000002A9 D1E0                        shl ax, 1
+   382 000002AB D1E0                        shl ax, 1
+   383 000002AD D1E0                        shl ax, 1
+   384 000002AF D1E0                        shl ax, 1
+   385                                  
+   386 000002B1 8A1E[8D01]                  mov bl, [FTMP_EXP]       ; load and clear lower 4 of exponent, then or with al
+   387 000002B5 80E30F                      and bl, 0Fh
+   388 000002B8 08D8                        or al, bl
+   389                                  
+   390 000002BA 8A1E[8C01]                  mov bl, [FTMP_SIGN]     ; Load the sign byte into bl
+   391 000002BE D0E3                        shl bl, 1              ; Shift left by 7 to get sign bit to left side of reg
+   392 000002C0 D0E3                        shl bl, 1
+   393 000002C2 D0E3                        shl bl, 1
+   394 000002C4 D0E3                        shl bl, 1
+   395 000002C6 D0E3                        shl bl, 1
+   396 000002C8 D0E3                        shl bl, 1
+   397 000002CA D0E3                        shl bl, 1
+   398                                  
+   399 000002CC 08DC                        or ah, bl             ; Join bl to ah
+   400 000002CE 8904                        mov [si], ax
+   401                                  
+   402 000002D0 C3                          ret
+   403                                  
+   404                                  ; ----- EXP_ALIGN -----
+   405                                  EXP_ALIGN:
+   406                                  .find_smallest_exp:
+   407 000002D1 A0[8701]                    mov al, [FAC_EXP]
+   408 000002D4 3A06[8D01]                  cmp al, [FTMP_EXP]
+   409                                  
+   410 000002D8 7C29                        jl .shift_fac_exp           ; FAC exponent is smaller
+   411 000002DA 7F02                        jg .shift_ftmp_exp          ; FTMP exponent is smalelr
+   412 000002DC EB4A                        jmp .end                    ; already equal
+   413                                  
+   414                                  .shift_ftmp_exp:                ; Exponent shifting done on ftmp
+   415 000002DE 8A1E[8701]                  mov bl, [FAC_EXP]           ; Load FAC_EXP into bl for optimization, pointless right now, but im new to this so chill
+   416                                  
+   417 000002E2 8B16[9001]                  mov dx, [FTMP_MAG_HI]
+   418 000002E6 A1[8E01]                    mov ax, [FTMP_MAG_LO]
+   419                                  
+   420                                  .ftmp_loop:                     ; Loop to shift ftmp exponent
+   421 000002E9 381E[8D01]                  cmp [FTMP_EXP], bl
+   422 000002ED 740B                        je .ftmp_done
+   423                                  
+   424 000002EF 8006[8D01]01                add byte [FTMP_EXP], 1      ; Add one to increase the exponent
+   425                                  
+   426 000002F4 D1EA                        shr dx, 1                   ; Shift the magnitude to match the increase in exponent
+   427 000002F6 D1D8                        rcr ax, 1
+   428                                  
+   429 000002F8 EBEF                        jmp .ftmp_loop
+   430                                  
+   431                                  .ftmp_done:                     ; Store magnitude values
+   432 000002FA 8916[9001]                  mov [FTMP_MAG_HI], dx
+   433 000002FE A3[8E01]                    mov [FTMP_MAG_LO], ax
+   434                                      
+   435 00000301 EB25                        jmp .end
+   436                                  
+   437                                  .shift_fac_exp:
+   438 00000303 8A1E[8D01]                  mov bl, [FTMP_EXP] 
+   439                                  
+   440 00000307 8B16[8A01]                  mov dx, [FAC_MAG_HI]
+   441 0000030B A1[8801]                    mov ax, [FAC_MAG_LO]
+   442                                      
+   443                                  .fac_loop:                      ; Loop to shift ftmp exponent
+   444 0000030E 381E[8701]                  cmp [FAC_EXP], bl
+   445 00000312 740B                        je .fac_done
+   446                                  
+   447 00000314 8006[8701]01                add byte [FAC_EXP], 1       ; Add one to increase the exponent
+   448                                  
+   449 00000319 D1EA                        shr dx, 1                   ; Shift the magnitude to match the increase in exponent
+   450 0000031B D1D8                        rcr ax, 1
+   451                                  
+   452 0000031D EBEF                        jmp .fac_loop
+   453                                  
+   454                                  .fac_done:
+   455 0000031F 8916[8A01]                  mov [FAC_MAG_HI], dx        ; Store magnitude values
+   456 00000323 A3[8801]                    mov [FAC_MAG_LO], ax
+   457                                  
+   458 00000326 EB00                        jmp .end
+   459                                  
+   460                                  .end:
+   461 00000328 C3                          ret
+   462                                  
+   463                                  ; ----- FP_ADD -----
+   464                                  FP_ADD:
+   465 00000329 E8D4FE                      call FTMP_LOAD              ; Load pointed to value into FTMP
+   466 0000032C E8A2FF                      call EXP_ALIGN              ; Align exponents and adjust mags
+   467                                  
+   468                                  .addition:
+   469 0000032F A1[8801]                    mov ax, [FAC_MAG_LO]        ; Load the regs with FAC
+   470 00000332 8B16[8A01]                  mov dx, [FAC_MAG_HI]
+   471                                      
+   472 00000336 0306[8E01]                  add ax, [FTMP_MAG_LO]       ; Add low mags together
+   473 0000033A 1316[9001]                  adc dx, [FTMP_MAG_HI]       ; Important use of adc, if there was a carry on the low words, 1 should be added to the higher mag
+   474                                      
+   475 0000033E A3[8801]                    mov [FAC_MAG_LO], ax        ; Store final values
+   476 00000341 8916[8A01]                  mov [FAC_MAG_HI], dx
+   477                                  
+   478 00000345 C3                          ret
+   479                                  
+   480                                  ; ----- FAC_SUB -----
+   481                                  FAC_SUB:
+   482 00000346 E8B7FE                      call FTMP_LOAD              ; Load ftmp and align exponents
+   483 00000349 E885FF                      call EXP_ALIGN
+   484                                  
+   485                                  .subtraction:
+   486 0000034C A1[8801]                    mov ax, [FAC_MAG_LO]        ; Load regs
+   487 0000034F 8B16[8A01]                  mov dx, [FAC_MAG_HI]
+   488                                  
+   489 00000353 2B06[8E01]                  sub ax, [FTMP_MAG_LO]       ; Subtract low mags, then ensure you borrow when dealing with high
+   490 00000357 1B16[9001]                  sbb dx, [FTMP_MAG_HI]
+   491                                  
+   492 0000035B A3[8801]                    mov [FAC_MAG_LO], ax        ; Store result back into FAC
+   493 0000035E 8916[8A01]                  mov [FAC_MAG_HI], dx
+   494                                  
+   495 00000362 C3                          ret
+   496                                  
+   497                                  ; ----- FAC_MUL -----
+   498                                  FAC_MUL:
+   499 00000363 E89AFE                      call FTMP_LOAD
+   500                                  
+   501                                  .compute_sign:
+   502 00000366 A0[8601]                    mov al, [FAC_SIGN]
+   503 00000369 3206[8C01]                  xor al, [FTMP_SIGN]
+   504                                  
+   505 0000036D A2[8601]                    mov [FAC_SIGN], al
+   506                                  
+   507                                  .multiply_mags:
+   508                                      ; Clear upper result words
+   509 00000370 C706[9A01]0000              mov word [FMUL_0], 0
+   510 00000376 C706[9C01]0000              mov word [FMUL_1], 0
+   511 0000037C C706[9E01]0000              mov word [FMUL_2], 0
+   512 00000382 C706[A001]0000              mov word [FMUL_3], 0
+   513                                  
+   514                                      ; FAC_LO * FTMP_LO
+   515 00000388 A1[8801]                    mov ax, [FAC_MAG_LO]
+   516 0000038B F726[8E01]                  mul word [FTMP_MAG_LO]
+   517                                  
+   518 0000038F A3[9A01]                    mov [FMUL_0], ax
+   519 00000392 8916[9C01]                  mov [FMUL_1], dx
+   520                                  
+   521                                  
+   522                                      ; FAC_HI * FTMP_LO
+   523 00000396 A1[8A01]                    mov ax, [FAC_MAG_HI]
+   524 00000399 F726[8E01]                  mul word [FTMP_MAG_LO]
+   525                                  
+   526 0000039D 0106[9C01]                  add [FMUL_1], ax
+   527 000003A1 83D200                      adc dx, 0
+   528 000003A4 8916[9E01]                  mov [FMUL_2], dx
+   529                                  
+   530                                      ; FAC_LO * FTMP_HI
+   531 000003A8 A1[8801]                    mov ax, [FAC_MAG_LO]
+   532 000003AB F726[9001]                  mul word [FTMP_MAG_HI]
+   533                                  
+   534 000003AF 0106[9C01]                  add [FMUL_1], ax
+   535 000003B3 1116[9E01]                  adc [FMUL_2], dx
+   536 000003B7 8316[A001]00                adc word [FMUL_3], 0
+   537                                  
+   538                                      ; FAC_HI * FTMP_HI
+   539 000003BC A1[8A01]                    mov ax, [FAC_MAG_HI]
+   540 000003BF F726[9001]                  mul word [FTMP_MAG_HI]
+   541                                  
+   542 000003C3 0106[9E01]                  add [FMUL_2], ax
+   543 000003C7 1116[A001]                  adc [FMUL_3], dx
+   544                                  
+   545                                      ; Exponent A*B = (M_A * M_B) * 2^(E_A + E_B)
+   546 000003CB A0[8701]                    mov al, [FAC_EXP]
+   547 000003CE 0206[8D01]                  add al, [FTMP_EXP]
+   548 000003D2 A2[8701]                    mov [FAC_EXP], al
+   549                                  
+   550                                  .normalize:
+   551                                      ; If either FMUL_2, FMUL_3 have some number stored, then keep shifting
+   552 000003D5 A1[A001]                    mov ax, [FMUL_3]
+   553 000003D8 0B06[9E01]                  or ax, [FMUL_2]
+   554 000003DC 7416                        jz .normalized
+   555                                  
+   556                                      ; NASM doesn't automatically remember allocation type of memory
+   557 000003DE D12E[A001]                  shr word [FMUL_3], 1
+   558 000003E2 D11E[9E01]                  rcr word [FMUL_2], 1
+   559 000003E6 D11E[9C01]                  rcr word [FMUL_1], 1
+   560 000003EA D11E[9A01]                  rcr word [FMUL_0], 1
+   561                                  
+   562 000003EE FE06[8701]                  inc byte [FAC_EXP]
+   563 000003F2 EBE1                        jmp .normalize
+   564                                  
+   565                                  .normalized:
+   566                                      ; Move multiplication result to FAC
+   567 000003F4 A1[9C01]                    mov ax, [FMUL_1]
+   568 000003F7 8B1E[9A01]                  mov bx, [FMUL_0]
+   569                                  
+   570 000003FB 891E[8801]                  mov [FAC_MAG_LO], bx
+   571 000003FF A3[8A01]                    mov [FAC_MAG_HI], ax
+   572                                  
+   573                                      ; Check if mag is 0, if yes, clear exponent to prevent -0
+   574 00000402 A1[8801]                    mov ax, [FAC_MAG_LO]
+   575 00000405 0B06[8A01]                  or ax, [FAC_MAG_HI]
+   576 00000409 750A                        jnz .done
+   577                                  
+   578 0000040B C606[8601]00                mov byte [FAC_SIGN], 0
+   579 00000410 C606[8701]00                mov byte [FAC_EXP], 0
+   580                                  
+   581                                      .done:
+   582 00000415 C3                          ret
+   583                                  
+   584                                  ; ----- FAC_SAVE -----
+   585                                  FAC_SAVE:
+   586                                      
+   587 00000416 A0[8601]                    mov al, [FAC_SIGN]
+   588 00000419 8A26[8701]                  mov ah, [FAC_EXP]
+   589                                  
+   590 0000041D A2[9201]                    mov [FSRC_SIGN], al
+   591 00000420 8826[9301]                  mov [FSRC_EXP], ah
+   592                                  
+   593 00000424 A1[8A01]                    mov ax, [FAC_MAG_HI]
+   594 00000427 8B1E[8801]                  mov bx, [FAC_MAG_LO]
+   595                                  
+   596 0000042B A3[9601]                    mov [FSRC_MAG_HI], ax
+   597 0000042E 891E[9401]                  mov [FSRC_MAG_LO], bx
+   598                                  
+   599 00000432 C3                          ret
+   600                                  
+   601                                  ; ----- FAC_RES -----
+   602                                  FAC_RES:
+   603                                      
+   604 00000433 A0[9201]                    mov al, [FSRC_SIGN]
+   605 00000436 8A26[9301]                  mov ah, [FSRC_EXP]
+   606                                  
+   607 0000043A A2[8601]                    mov [FAC_SIGN], al
+   608 0000043D 8826[8701]                  mov [FAC_EXP], ah
+   609                                  
+   610 00000441 A1[9601]                    mov ax, [FSRC_MAG_HI]
+   611 00000444 8B1E[9401]                  mov bx, [FSRC_MAG_LO]
+   612                                  
+   613 00000448 A3[8A01]                    mov [FAC_MAG_HI], ax
+   614 0000044B 891E[8801]                  mov [FAC_MAG_LO], bx
+   615                                  
+   616 0000044F C3                          ret
