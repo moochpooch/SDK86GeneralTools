@@ -1,0 +1,41 @@
+     1                                  ORG 0100h
+     2                                  BITS 16
+     3                                  
+     4                                  ; The goal of the program is to take a pointer form DI, then store one from word from UART in that memory address.
+     5                                  
+     6                                  ; Used to initialize I/O port and push elements to stack. Since the program should be general purpose, the stack location will not be changed. At DI, the word is stored as [first RX][second RX]
+     7                                  .INIT:
+     8 00000000 50                      	push ax			; Used regs are stored in stack
+     9 00000001 51                      	push cx
+    10 00000002 52                      	push dx
+    11 00000003 57                      	push di
+    12                                  
+    13 00000004 31C0                    	xor ax, ax
+    14 00000006 31C9                    	xor cx, cx
+    15 00000008 31D2                    	xor dx, dx
+    16                                  	
+    17 0000000A BAF2FF                  	mov dx, 0xFFF2		; Status port location
+    18                                  
+    19                                  CONSUME_AND_STORE:
+    20 0000000D B90200                  	mov cx, 2		; UART holds a byte at a time, so we must track how many bytes were read
+    21                                  
+    22                                  	.loop:
+    23 00000010 ED                      	in ax, dx
+    24 00000011 A90200                  	test ax, 0x02
+    25 00000014 74FA                    	jz .loop
+    26                                  
+    27 00000016 BAF0FF                  	mov dx, 0xFFF0		; UART read/write location
+    28 00000019 ED                      	in ax, dx
+    29 0000001A 8905                    	mov [di], ax
+    30 0000001C 47                      	inc di
+    31 0000001D BAF2FF                  	mov dx, 0xFFF2
+    32 00000020 E2EE                    	loop .loop
+    33                                  
+    34                                  .restore:
+    35 00000022 5F                      	pop di
+    36 00000023 5A                      	pop dx
+    37 00000024 59                      	pop cx
+    38 00000025 58                      	pop ax
+    39                                  
+    40                                  .end:
+    41 00000026 CD02                    	int 2

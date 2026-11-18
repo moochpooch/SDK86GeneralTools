@@ -1,0 +1,34 @@
+     1                                  ORG 0100h
+     2                                  BITS 16
+     3                                  ; Goal of the program is to consume one word from serial and write it into memory
+     4                                  ; The monitor seems to keep UART control word as FFFF
+     5                                  
+     6                                  INIT_UART:
+     7 00000000 BAF2FF                  mov dx, 0xFFF2
+     8 00000003 31C0                    xor ax, ax
+     9 00000005 31DB                    xor bx, bx
+    10                                  ; Word contents will be placed in BX
+    11                                  CONSUME_WORD:
+    12 00000007 B90200                  mov cx, 2 ; Loop twice to get just 2  bytes
+    13                                  
+    14                                  .loop:
+    15 0000000A EC                      in al, dx
+    16 0000000B A802                    test al, 0x02
+    17 0000000D 74FB                    jz .loop
+    18                                  
+    19 0000000F BAF0FF                  mov dx, 0xFFF0
+    20 00000012 EC                      in al, dx
+    21 00000013 88C3                    mov bl, al
+    22                                  
+    23 00000015 F7C10100                test cx, 1
+    24 00000019 7407                    je .shift_bx
+    25                                  
+    26 0000001B BAF2FF                  mov dx, 0xFFF2
+    27 0000001E E2EA                    loop .loop
+    28                                  
+    29 00000020 CD02                    int 2
+    30                                  
+    31                                  .shift_bx:
+    32 00000022 86FB                    xchg bh, bl
+    33 00000024 BAF2FF                  mov dx, 0xFFF2
+    34 00000027 E2E1                    loop .loop

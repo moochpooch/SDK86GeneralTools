@@ -1,0 +1,54 @@
+     1                                  ORG 0100h
+     2                                  BITS 16
+     3                                  
+     4                                  ; Goal is to add two 64 bit numbers using memory and functions provided in x86. The result will be stored in the A register, but an additional OF byte is written to in case of large of overflow.
+     5                                  INIT:
+     6 00000000 C706[6C00]FFFF          	mov word [ALO0], 0xFFFF
+     7 00000006 C706[6E00]FFFF          	mov word [ALO1], 0xFFFF
+     8 0000000C C706[7000]FFFF          	mov word [AHI0], 0xFFFF
+     9 00000012 C706[7200]FFFF          	mov word [AHI1], 0xFFFF
+    10                                  
+    11 00000018 C706[7400]FFFF          	mov word [BLO0], 0xFFFF
+    12 0000001E C706[7600]FFFF          	mov word [BLO1], 0xFFFF
+    13 00000024 C706[7800]FFFF          	mov word [BHI0], 0xFFFF
+    14 0000002A C706[7A00]FFFF          	mov word [BHI1], 0xFFFF
+    15                                  
+    16 00000030 C606[7C00]FF            	mov byte [OF], 0xFF
+    17                                  
+    18                                  _64BITADDITION:
+    19 00000035 A1[6C00]                	mov ax, [ALO0]
+    20 00000038 8B1E[7400]              	mov bx, [BLO0]
+    21 0000003C 01D8                    	add ax, bx
+    22 0000003E A3[6C00]                	mov [ALO0], ax
+    23                                  
+    24 00000041 A1[6E00]                	mov ax, [ALO1]
+    25 00000044 8B1E[7600]              	mov bx, [BLO1]
+    26 00000048 11D8                    	adc ax, bx
+    27 0000004A A3[6E00]                	mov [ALO1], ax
+    28                                  
+    29 0000004D A1[7000]                	mov ax, [AHI0]
+    30 00000050 8B1E[7800]              	mov bx, [BHI0]
+    31 00000054 11D8                    	adc ax, bx
+    32 00000056 A3[7000]                	mov [AHI0], ax
+    33                                  
+    34 00000059 A1[7200]                	mov ax, [AHI1]
+    35 0000005C 8B1E[7A00]              	mov bx, [BHI1]
+    36 00000060 11D8                    	adc ax, bx
+    37 00000062 A3[7200]                	mov [AHI1], ax
+    38                                  
+    39 00000065 8016[7C00]00            	adc [OF], 0
+    40                                  
+    41 0000006A CD02                    	int 2
+    42                                  
+    43                                  MEM_REGS:
+    44 0000006C 0000                    	ALO0 dw 0
+    45 0000006E 0000                    	ALO1 dw 0
+    46 00000070 0000                    	AHI0 dw 0
+    47 00000072 0000                    	AHI1 dw 0
+    48                                  
+    49 00000074 0000                    	BLO0 dw 0
+    50 00000076 0000                    	BLO1 dw 0
+    51 00000078 0000                    	BHI0 dw 0
+    52 0000007A 0000                    	BHI1 dw 0
+    53                                  
+    54 0000007C 00                      	OF db 0

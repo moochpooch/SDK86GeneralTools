@@ -23,7 +23,7 @@ if [ -z "$2" ]; then
 	BYTE_SEGMENT="0000"
 fi
 
-$(sudo $SERIAL_SETUP)
+sudo "$SERIAL_SETUP"
 trap 'rm -f "$OUTFILE"' EXIT
 
 if ! "$ASSM_PROGRAM" "$FILE"; then

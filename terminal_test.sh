@@ -19,6 +19,9 @@ fi
 #sudo cat /dev/ttyUSB0 &
 #cat_PID=$!
 
+# Clear monitor if not in the correct state
+echo -q "c" | pv -q -L 10 | sudo tee /dev/ttyUSB0 > /dev/null
+
 # send file to serial
 cat "$file_path" | pv -q -L 10 | sudo tee /dev/ttyUSB0 > /dev/null
 
